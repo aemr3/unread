@@ -1,6 +1,4 @@
 RSpec::Matchers.define :perform_queries do |expected|
-  supports_block_expectations
-
   match do |block|
     query_count(&block) == expected
   end
@@ -14,6 +12,11 @@ RSpec::Matchers.define :perform_queries do |expected|
     ActiveSupport::Notifications.subscribe('sql.active_record', @counter.to_proc)
     yield
     ActiveSupport::Notifications.unsubscribe(@counter.to_proc)
+
     @counter.query_count
+  end
+
+  def supports_block_expectations?
+    true
   end
 end

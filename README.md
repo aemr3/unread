@@ -3,25 +3,25 @@ Unread
 
 Ruby gem to manage read/unread status of ActiveRecord objects - and it's fast.
 
-[![Build Status](https://travis-ci.org/ledermann/unread.svg?branch=master)](https://travis-ci.org/ledermann/unread)
-[![Maintainability](https://api.codeclimate.com/v1/badges/930c8df0f99b20324444/maintainability)](https://codeclimate.com/github/ledermann/unread/maintainability)
-[![Coverage Status](https://coveralls.io/repos/ledermann/unread/badge.svg?branch=master)](https://coveralls.io/r/ledermann/unread?branch=master)
+[![Build Status](https://travis-ci.org/ledermann/unread.png?branch=master)](https://travis-ci.org/ledermann/unread)
+[![Code Climate](https://codeclimate.com/github/ledermann/unread.png)](https://codeclimate.com/github/ledermann/unread)
+[![Coverage Status](https://coveralls.io/repos/ledermann/unread/badge.png)](https://coveralls.io/r/ledermann/unread)
+
 
 ## Features
 
-* Manages unread records for anything you want readers (e.g. users) to read (like messages, documents, comments etc.)
+* Manages unread records for anything you want users to read (like messages, documents, comments etc.)
 * Supports _mark as read_ to mark a **single** record as read
 * Supports _mark all as read_ to mark **all** records as read in a single step
-* Gives you a scope to get the unread records for a given reader
+* Gives you a scope to get the unread records for a given user
 * Needs only one additional database table
 * Most important: Great performance
 
 
 ## Requirements
 
-* Ruby 2.2 or newer
-* Rails 4.0 or newer (including Rails 5.1 and 5.2)
-* MySQL, PostgreSQL or SQLite
+* Ruby 1.9.3 or newer
+* Rails 3 (including 3.0, 3.1, 3.2) and Rails 4. For use with Rails 2.3 there is a branch named "rails2"
 * Needs a timestamp field in your models (like created_at or updated_at) with a database index on it
 
 
@@ -52,35 +52,16 @@ rails g unread:migration
 rake db:migrate
 ```
 
-## Upgrade from previous releases
-
-If you upgrade from an older release of this gem, you should read the [upgrade notes](UPGRADE.md).
-
 
 ## Usage
 
 ```ruby
 class User < ActiveRecord::Base
   acts_as_reader
-
-  # Optional: Allow a subset of users as readers only
-  def self.reader_scope
-    where(is_admin: true)
-  end
 end
 
 class Message < ActiveRecord::Base
-  acts_as_readable on: :created_at
-
-  # The `on:` option sets the relevant attribute for comparing timestamps.
-  #
-  # The default is :updated_at, so updating a record, which was read by a
-  # reader makes it unread again.
-  #
-  # Using :created_at, only new records will show up as unread. Updating a
-  # record which was read by a reader, will NOT mark it as unread.
-  #
-  # Any other existing timestamp field can be used as `on:` option.
+  acts_as_readable :on => :created_at
 end
 
 message1 = Message.create!
@@ -90,17 +71,9 @@ message2 = Message.create!
 Message.unread_by(current_user)
 # => [ message1, message2 ]
 
-message1.mark_as_read! for: current_user
+message1.mark_as_read! :for => current_user
 Message.unread_by(current_user)
 # => [ message2 ]
-
-## Get read messages for a given user
-Message.read_by(current_user)
-# => [ ]
-
-message1.mark_as_read! for: current_user
-Message.read_by(current_user)
-# => [ message1 ]
 
 ## Get all messages including the read status for a given user
 messages = Message.with_read_marks_for(current_user)
@@ -110,80 +83,15 @@ messages[0].unread?(current_user)
 messages[1].unread?(current_user)
 # => true
 
-Message.mark_as_read! :all, for: current_user
+Message.mark_as_read! :all, :for => current_user
 Message.unread_by(current_user)
 # => [ ]
 
-Message.read_by(current_user)
-# => [ message1, message2 ]
-
-## Get users that have not read a given message
-user1 = User.create!
-user2 = User.create!
-
-User.have_not_read(message1)
-# => [ user1, user2 ]
-
-message1.mark_as_read! for: user1
-User.have_not_read(message1)
-# => [ user2 ]
-
-## Get users that have read a given message
-User.have_read(message1)
-# => [ user1 ]
-
-message1.mark_as_read! for: user2
-User.have_read(message1)
-# => [ user1, user2 ]
-
-Message.mark_as_read! :all, for: user1
-User.have_not_read(message1)
-# => [ ]
-User.have_not_read(message2)
-# => [ user2 ]
-
-User.have_read(message1)
-# => [ user1, user2 ]
-User.have_read(message2)
-# => [ user1 ]
-
-## Get all users including their read status for a given message
-users = User.with_read_marks_for(message1)
-# => [ user1, user2 ]
-users[0].have_read?(message1)
-# => true
-users[1].have_read?(message2)
-# => false
-
-# Optional: Cleaning up unneeded markers
-# Do this in a cron job once a day
+# Optional: Cleaning up unneeded markers.
+# Do this in a cron job once a day.
 Message.cleanup_read_marks!
 ```
 
-## Getting read/unread stats through a relationship
-
-```ruby
-class Document < ApplicationRecord
-  has_many :comments
-end
-
-class Comment < ApplicationRecord
-  acts_as_readable on: :created_at
-  belongs_to :document
-end
-
-# Get unread comments count for a document
-document = Document.find(1)
-default_hash = Hash.new { |h, k| h[k] = { unread: 0, total: 0 } }
-document.comments.with_read_marks_for(current_user).reduce(default_hash) do |hash, comment|
-  hash[comment.id][:unread] += 1 if comment.unread?(current_user)
-  hash[comment.id][:total] += 1
-  hash
-end
-# => {20=>{:unread=>1, :total=>10}, 82=>{:unread=>0, :total=>4}
-```
-
-Using `with_read_marks_for` here is the key. It uses just one query and makes sure that the following `unread?` invocations use the result of the first query.
 
 ## How does it work?
 
@@ -211,10 +119,9 @@ Generated query:
 ```sql
 SELECT messages.*
 FROM messages
-LEFT JOIN read_marks ON read_marks.readable_type = "Message"
+LEFT JOIN read_marks ON read_marks.readable_type = 'Message'
                     AND read_marks.readable_id = messages.id
-                    AND read_marks.reader_id = 42
-                    AND read_marks.reader_type = 'User'
+                    AND read_marks.member_id = 42
                     AND read_marks.timestamp >= messages.created_at
 WHERE read_marks.id IS NULL
 AND messages.created_at > '2010-10-20 08:50:00'
@@ -223,4 +130,14 @@ AND messages.created_at > '2010-10-20 08:50:00'
 Hint: You should add a database index on `messages.created_at`.
 
 
-Copyright (c) 2010-2018 [Georg Ledermann](http://www.georg-ledermann.de) and [contributors](https://github.com/ledermann/unread/graphs/contributors), released under the MIT license
+## Similar tools
+
+There are two other gems/plugins doing a similar job:
+
+* http://github.com/jhnvz/mark_as_read
+* http://github.com/mbleigh/acts-as-readable
+
+Unfortunately, both of them have a lack of performance, because they calculate the unread records doing a `find(:all)`, which should be avoided for a large amount of records. This gem is based on a timestamp algorithm and therefore it's very fast.
+
+
+Copyright (c) 2010-2014 [Georg Ledermann](http://www.georg-ledermann.de), released under the MIT license

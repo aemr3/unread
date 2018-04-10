@@ -1,25 +1,20 @@
 require 'simplecov'
 require 'coveralls'
 
-SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter.new([
+SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter[
   SimpleCov::Formatter::HTMLFormatter,
   Coveralls::SimpleCov::Formatter
-])
+]
 SimpleCov.start do
   add_filter '/spec/'
 end
 
+require 'active_record'
 require 'timecop'
 require 'unread'
-require 'generators/unread/migration/templates/migration.rb'
 
-require 'app/models/reader'
-require 'app/models/different_reader'
-require 'app/models/customer'
-require 'app/models/sti_reader'
-require 'app/models/document'
-require 'app/models/email'
-require 'app/models/multi_level_sti_readable'
+require 'model/reader'
+require 'model/email'
 
 # Requires supporting ruby files with custom matchers and macros, etc,
 # in spec/support/ and its subdirectories.
@@ -45,10 +40,6 @@ RSpec.configure do |config|
   config.after :each do
     Timecop.return
   end
-
-  config.after :suite do
-    UnreadMigration.down
-  end
 end
 
 if I18n.respond_to?(:enforce_available_locales=)
@@ -56,25 +47,30 @@ if I18n.respond_to?(:enforce_available_locales=)
 end
 
 def setup_db
-  configs = YAML.load_file('spec/database.yml')
-  ActiveRecord::Base.configurations = configs
+  puts "Testing with ActiveRecord #{ActiveRecord::VERSION::STRING}"
 
-  db_name = ENV['DB'] || 'sqlite'
-
-  puts "Testing with ActiveRecord #{ActiveRecord::VERSION::STRING} on #{db_name}"
-
-  ActiveRecord::Base.establish_connection(db_name.to_sym)
-  ActiveRecord::Base.default_timezone = :utc
+  ActiveRecord::Base.establish_connection :adapter => 'sqlite3', :database => ':memory:'
   ActiveRecord::Migration.verbose = false
 
-  UnreadMigration.up
-  SpecMigration.up
+  require File.expand_path('../../lib/generators/unread/migration/templates/migration.rb', __FILE__)
+  UnreadMigration.migrate(:up)
+
+  ActiveRecord::Schema.define(:version => 1) do
+    create_table :readers, :primary_key => 'number', :force => true do |t|
+      t.string :name
+    end
+
+    create_table :emails, :primary_key => 'messageid', :force => true do |t|
+      t.string :subject
+      t.text :content
+      t.datetime :created_at
+      t.datetime :updated_at
+    end
+  end
 end
 
 def clear_db
   Reader.delete_all
-  DifferentReader.delete_all
-  StiReader.delete_all
   Email.delete_all
   ReadMark.delete_all
 end

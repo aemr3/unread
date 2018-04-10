@@ -1,2 +1,0 @@
-class MultiLevelStiReadable < Email
-end

@@ -1,15 +1,19 @@
 class ReadMark < ActiveRecord::Base
-  belongs_to :readable, polymorphic: true, inverse_of: :read_marks
+  belongs_to :readable, :polymorphic => true
+  if ActiveRecord::VERSION::MAJOR < 4
+    attr_accessible :readable_id, :member_id, :readable_type, :timestamp
+  end
 
-  validates_presence_of :reader_id, :reader_type, :readable_type
+  validates_presence_of :member_id, :readable_type
 
-  scope :global, lambda { where(readable_id: nil) }
+  scope :global, lambda { where(:readable_id => nil) }
   scope :single, lambda { where('readable_id IS NOT NULL') }
   scope :older_than, lambda { |timestamp| where([ 'timestamp < ?', timestamp ]) }
 
-  # Returns the classes defined by acts_as_reader
-  class_attribute :reader_classes
+  # Returns the class defined by acts_as_reader
+  def self.reader_class
+    reflect_on_all_associations(:belongs_to).find { |assoc| assoc.name == :user }.try(:klass)
+  end
 
-  # Returns the classes defined by acts_as_readable
   class_attribute :readable_classes
 end

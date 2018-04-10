@@ -1,24 +1,16 @@
-class UnreadMigration < Unread::MIGRATION_BASE_CLASS
+class UnreadMigration < ActiveRecord::Migration
   def self.up
-    create_table ReadMark, force: true, options: create_options do |t|
-      t.references :readable, polymorphic: { null: false }
-      t.references :reader,   polymorphic: { null: false }
+    create_table :read_marks, :force => true do |t|
+      t.integer  :readable_id
+      t.integer  :member_id,       :null => false
+      t.string   :readable_type, :null => false, :limit => 20
       t.datetime :timestamp
     end
 
-    add_index ReadMark, [:reader_id, :reader_type, :readable_type, :readable_id], name: 'read_marks_reader_readable_index', unique: true
+    add_index :read_marks, [:member_id, :readable_type, :readable_id]
   end
 
   def self.down
-    drop_table ReadMark
-  end
-
-  def self.create_options
-    options = ''
-    if defined?(ActiveRecord::ConnectionAdapters::Mysql2Adapter) \
-      && ActiveRecord::Base.connection.instance_of?(ActiveRecord::ConnectionAdapters::Mysql2Adapter)
-      options = 'DEFAULT CHARSET=latin1'
-    end
-    options
+    drop_table :read_marks
   end
 end
